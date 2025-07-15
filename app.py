@@ -1,69 +1,70 @@
 import cv2
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import av
+
+# Load Haar cascade
 face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+
+# Convert hex color to BGR
 def hex_to_bgr(hex_color):
     hex_color = hex_color.lstrip('#')
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return (b, g, r)
-def detect_faces(color, scale_factor, min_neighbors):
-    # Initialize the webcam
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        st.error("Error: Could not open webcam. Make sure it is connected and not used by another app.")
-        return
 
-    bgr_color = hex_to_bgr(color)
-    st.info("Detection started. A window will open. Press 'q' in the window to quit.")
 
-    while True:
-        # Read the frames from the webcam
-        ret, frame = cap.read()
-        if not ret or frame is None:
-            st.error("Error: Failed to capture image from webcam.")
-            break
+# Define VideoTransformer
+class FaceDetectionTransformer(VideoTransformerBase):
+    def __init__(self, color, scale_factor, min_neighbors):
+        self.bgr_color = hex_to_bgr(color)
+        self.scale_factor = scale_factor
+        self.min_neighbors = min_neighbors
 
-        # Convert the frames to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(
+            gray,
+            scaleFactor=self.scale_factor,
+            minNeighbors=self.min_neighbors
+        )
 
-        # Detect the faces using the face cascade classifier
-        faces = face_cascade.detectMultiScale(gray, scale_factor, min_neighbors)
-
-        # Draw rectangles around the detected faces
         for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), bgr_color, 2)
-            cv2.imwrite('face.jpg', frame[y:y+h, x:x+w])
+            cv2.rectangle(img, (x, y), (x + w, y + h), self.bgr_color, 2)
+            # Optionally save detected face:
+            face_crop = img[y:y+h, x:x+w]
+            cv2.imwrite('face.jpg', face_crop)
 
-        # Display the frames
-        cv2.imshow('Face Detection using Viola-Jones Algorithm', frame)
-
-        # Exit the loop when 'q' is pressed
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # Release the webcam and close all windows
-    cap.release()
-    cv2.destroyAllWindows()
+        return img
 
 
-
-
+# Streamlit app
 def app():
-    st.title("Face Detection using Viola-Jones Algorithm")
-    st.write("Press the button below to start detecting faces from your webcam")
+    st.title("Face Detection using Viola-Jones Algorithm with WebRTC")
+    st.write("Face detection directly in your browser using your webcam!")
+
     st.markdown("""
     ### Instructions
-    1. Choose the color of the rectangle for face detection.
-    2. Adjust the **scaleFactor** and **minNeighbors** parameters to improve detection.
-    3. Click **Detect Faces** to process the image.
-        """)
+    1. Pick the color of the rectangle for face detection.
+    2. Adjust **scaleFactor** and **minNeighbors** for detection sensitivity.
+    3. Start your webcam and see results in real-time!
+    """)
+
     color = st.color_picker("Pick A Color", "#00f900")
     scale_factor = st.slider("scaleFactor", min_value=1.05, max_value=2.0, value=1.1, step=0.05)
     min_neighbors = st.slider("minNeighbors", min_value=1, max_value=10, value=5, step=1)
-    # Add a button to start detecting faces
-    if st.button("Detect Faces"):
-        # Call the detect_faces function
-        detect_faces(color,scale_factor,min_neighbors)
+
+    st.write("Click **Start** below to activate your webcam:")
+
+    webrtc_streamer(
+        key="face-detection",
+        video_transformer_factory=lambda: FaceDetectionTransformer(color, scale_factor, min_neighbors),
+        media_stream_constraints={"video": True, "audio": False},
+        async_transform=True
+    )
+
+
 if __name__ == "__main__":
     app()
