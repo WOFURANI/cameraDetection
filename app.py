@@ -7,29 +7,48 @@ def hex_to_bgr(hex_color):
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return (b, g, r)
-def detect_faces(color,scale_factor,min_neighbors):
+def detect_faces(color, scale_factor, min_neighbors):
     # Initialize the webcam
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        st.error("Error: Could not open webcam. Make sure it is connected and not used by another app.")
+        return
+
     bgr_color = hex_to_bgr(color)
+    st.info("Detection started. A window will open. Press 'q' in the window to quit.")
+
     while True:
         # Read the frames from the webcam
         ret, frame = cap.read()
+        if not ret or frame is None:
+            st.error("Error: Failed to capture image from webcam.")
+            break
+
         # Convert the frames to grayscale
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
         # Detect the faces using the face cascade classifier
         faces = face_cascade.detectMultiScale(gray, scale_factor, min_neighbors)
+
         # Draw rectangles around the detected faces
         for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h),bgr_color, 2)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), bgr_color, 2)
             cv2.imwrite('face.jpg', frame[y:y+h, x:x+w])
+
         # Display the frames
         cv2.imshow('Face Detection using Viola-Jones Algorithm', frame)
+
         # Exit the loop when 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
     # Release the webcam and close all windows
     cap.release()
     cv2.destroyAllWindows()
+
+
+
+
 def app():
     st.title("Face Detection using Viola-Jones Algorithm")
     st.write("Press the button below to start detecting faces from your webcam")
